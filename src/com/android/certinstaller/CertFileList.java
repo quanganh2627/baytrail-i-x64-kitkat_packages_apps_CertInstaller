@@ -84,8 +84,7 @@ public class CertFileList extends CertFile
     }
 
     public boolean onPreferenceClick(Preference pref) {
-        File file = new File(Environment.getExternalStorageDirectory(),
-                pref.getTitle().toString());
+        File file = new File(pref.getTitle().toString());
         if (file.isDirectory()) {
             Log.w(TAG, "impossible to pick a directory! " + file);
         } else {
