@@ -68,6 +68,8 @@ class CredentialHelper {
     private PrivateKey mUserKey;
     private X509Certificate mUserCert;
     private List<X509Certificate> mCaCerts = new ArrayList<X509Certificate>();
+    private byte[] mWapiAsCert;
+    private byte[] mWapiUserCert;
 
     CredentialHelper() {
     }
@@ -105,6 +107,9 @@ class CredentialHelper {
                         mUserKey.getEncoded());
             }
             ArrayList<byte[]> certs = new ArrayList<byte[]>(mCaCerts.size() + 1);
+            if (mWapiAsCert != null) certs.add(mWapiAsCert);
+            if (mWapiUserCert != null) certs.add(mWapiUserCert);
+
             if (mUserCert != null) {
                 certs.add(mUserCert.getEncoded());
             }
@@ -145,7 +150,13 @@ class CredentialHelper {
             X509Certificate cert = (X509Certificate)
                     certFactory.generateCertificate(
                             new ByteArrayInputStream(bytes));
-            if (isCa(cert)) {
+            if (isWapiAs(cert)) {
+                Log.d(TAG, "got a WAPI AS cert");
+                mWapiAsCert = bytes;
+            } else if (isWapiUser(cert)) {
+                Log.d(TAG, "got a WAPI user cert");
+                mWapiUserCert = bytes;
+            } else if (isCa(cert)) {
                 Log.d(TAG, "got a CA cert");
                 mCaCerts.add(cert);
             } else {
@@ -154,6 +165,37 @@ class CredentialHelper {
             }
         } catch (CertificateException e) {
             Log.w(TAG, "parseCert(): " + e);
+        }
+    }
+    private boolean isWapiAs(X509Certificate cert) {
+        try {
+            if (cert.getSigAlgOID().startsWith("1.2.156.11235.")) {
+                // TODO: add a test about this
+                String issuerName = cert.getIssuerX500Principal().getName();
+                String subjectName = cert.getSubjectX500Principal().getName();
+                if (issuerName.equals(subjectName)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isWapiUser(X509Certificate cert) {
+        try {
+            if (cert.getSigAlgOID().startsWith("1.2.156.11235.")) {
+                // TODO: add a test about this
+                String issuerName = cert.getIssuerX500Principal().getName();
+                String subjectName = cert.getSubjectX500Principal().getName();
+                if (!issuerName.equals(subjectName)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -183,6 +225,13 @@ class CredentialHelper {
         return mBundle.containsKey(Credentials.EXTRA_PUBLIC_KEY)
                 && mBundle.containsKey(Credentials.EXTRA_PRIVATE_KEY);
     }
+    boolean hasWapiAsCertificate() {
+        return (mWapiAsCert != null);
+    }
+
+    boolean hasWapiUserCertificate() {
+        return (mWapiUserCert != null);
+    }
 
     boolean hasUserCertificate() {
         return (mUserCert != null);
@@ -193,7 +242,9 @@ class CredentialHelper {
     }
 
     boolean hasAnyForSystemInstall() {
-        return (mUserKey != null) || hasUserCertificate() || hasCaCerts();
+        return (
+                 hasWapiAsCertificate() || hasWapiUserCertificate() ||
+                 mUserKey != null) || hasUserCertificate() || hasCaCerts();
     }
 
     void setPrivateKey(byte[] bytes) {
@@ -223,6 +274,13 @@ class CredentialHelper {
         // TODO: create more descriptive string
         StringBuilder sb = new StringBuilder();
         String newline = "<br>";
+        if (mWapiAsCert != null) {
+            sb.append(context.getString(R.string.one_wapi_ascrt)).append(newline);
+        }
+        if (mWapiUserCert != null) {
+            sb.append(context.getString(R.string.one_wapi_usercrt)).append(newline);
+        }
+
         if (mUserKey != null) {
             sb.append(context.getString(R.string.one_userkey)).append(newline);
         }
@@ -283,6 +341,20 @@ class CredentialHelper {
                 intent.putExtra(Credentials.EXTRA_CA_CERTIFICATES_DATA,
                         Credentials.convertToPem(caCerts));
             }
+            if (mWapiAsCert != null) {
+                intent.putExtra(Credentials.EXTRA_WAPI_AS_CERTIFICATES_NAME,
+			Credentials.WAPI_AS_CERTIFICATE + mName);
+		intent.putExtra(Credentials.EXTRA_WAPI_AS_CERTIFICATES_DATA,
+                        mWapiAsCert);
+            }
+            if (mWapiUserCert != null) {
+                intent.putExtra(Credentials.EXTRA_WAPI_USER_CERTIFICATES_NAME,
+			Credentials.WAPI_USER_CERTIFICATE + mName);
+		intent.putExtra(Credentials.EXTRA_WAPI_USER_CERTIFICATES_DATA,
+                        mWapiUserCert);
+			
+            }
+
             return intent;
         } catch (IOException e) {
             throw new AssertionError(e);
